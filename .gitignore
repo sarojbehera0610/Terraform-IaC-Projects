@@ -16,6 +16,4 @@ override.tf.json
 crash.log
 crash.*.log
 
-# Environment variable files
-*.tfvars
-*.tfvars.json
+

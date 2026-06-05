@@ -1,0 +1,5 @@
+aws_region          = "ap-south-1"
+vpc_cidr            = "192.168.0.0/16"
+vpc_name            = "test-vpc"
+public_subnet_cidr  = "192.168.1.0/24"
+public_subnet2_cidr = "192.168.2.0/24"
