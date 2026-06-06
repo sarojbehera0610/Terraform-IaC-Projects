@@ -109,16 +109,6 @@ terraform version
 ---
 
 ## Terraform Lifecycle
-terraform init
-│
-▼
-terraform plan
-│
-▼
-terraform apply
-│
-▼
-terraform destroy
 
 | Command | What it does |
 |---|---|
@@ -171,20 +161,174 @@ Automatic backup of the previous `terraform.tfstate` created before every
 
 ---
 
+## Terraform Workspaces
+
+Workspaces allow you to manage **multiple environments (dev, test, prod)** using
+the same Terraform code with completely separate state files. Each workspace has
+its own `terraform.tfstate` so resources never conflict.
+
+### Workspace Commands
+
+```bash
+# List all workspaces
+terraform workspace list
+
+# Create new workspaces
+terraform workspace new dev
+terraform workspace new test
+terraform workspace new prod
+
+# Show current active workspace
+terraform workspace show
+
+# Switch to a workspace
+terraform workspace select dev
+
+# Delete a workspace (switch away first)
+terraform workspace select default
+terraform workspace delete dev
+```
+
+### How workspaces prevent conflict
+
+Inside `.tf` files, use `terraform.workspace` to get the current workspace name:
+
+```hcl
+resource "aws_instance" "ec2" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = terraform.workspace == "prod" ? "t3.small" : "t3.micro"
+
+  tags = {
+    Name        = "${terraform.workspace}-ec2-instance"
+    Environment = terraform.workspace
+  }
+}
+```
+
+- `dev` workspace → creates `dev-ec2-instance` with its own state
+- `prod` workspace → creates `prod-ec2-instance` with its own state
+- `test` workspace → creates `test-ec2-instance` with its own state
+- No conflicts because each workspace has a separate `terraform.tfstate`
+
+### Workspace state file location
+terraform.tfstate.d/
+├── dev/
+│   └── terraform.tfstate
+├── prod/
+│   └── terraform.tfstate
+└── test/
+└── terraform.tfstate
+
+---
+
+## Remote Backend — Store State in S3
+
+By default Terraform stores `terraform.tfstate` locally. For teams, store it
+remotely in S3 so everyone shares the same state.
+
+### Step 1 — Create S3 bucket in AWS Console
+
+- Bucket name: `saroj-terraform-remote-backend-2026`
+- Region: `ap-south-1`
+- Enable versioning: Yes
+- Block all public access: Yes
+
+### Step 2 — Add backend block in `terraform` block
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket  = "saroj-terraform-remote-backend-2026"
+    key     = "workspace/terraform.tfstate"
+    region  = "ap-south-1"
+    encrypt = true
+  }
+}
+```
+
+### Step 3 — Initialize to migrate state to S3
+
+```bash
+terraform init
+# When asked "copy existing state to new backend?" → type yes
+
+terraform plan
+terraform apply
+```
+
+### Benefits of Remote Backend
+
+| Local State | Remote Backend S3 |
+|---|---|
+| Stored on your laptop | Stored in S3 — accessible by team |
+| No versioning | Versioning enabled — full history |
+| Lost if laptop crashes | Safe in S3 with replication |
+| No locking | DynamoDB locking prevents simultaneous apply |
+| Not shareable | Shareable across team |
+
+---
+
+## Terraform Import
+
+Import is used when a resource **already exists in AWS** (created manually via
+Console) and you want Terraform to start managing it without recreating it.
+
+### How Import Works
+
+1. Write the resource block in your `.tf` file first
+2. Run `terraform import` with the real AWS resource ID
+3. Terraform pulls the real state into `terraform.tfstate`
+4. Run `terraform plan` to verify no drift
+
+### Import Commands
+
+```bash
+# Syntax
+terraform import <resource_type>.<resource_name> <aws_resource_id>
+
+# Import existing EC2 instance
+terraform import aws_instance.ec2 i-0abc1234567890def
+
+# Import existing S3 bucket
+terraform import aws_s3_bucket.main saroj-existing-bucket
+
+# Import existing VPC
+terraform import aws_vpc.main vpc-0abc1234567890def
+
+# Import existing Security Group
+terraform import aws_security_group.sg sg-0abc1234567890def
+
+# Import existing IAM user
+terraform import aws_iam_user.admin_user terraform-admin-user
+
+# Import existing Key Pair
+terraform import aws_key_pair.kp terraform-keypair
+
+# After import — always verify
+terraform plan
+```
+
+### Important rules for Import
+
+- Resource block must exist in `.tf` file before importing
+- Import only brings state — it does NOT generate `.tf` code automatically
+- Always run `terraform plan` after import to check for drift
+- If plan shows changes, update your `.tf` code to match real resource
+
+---
+
 ## Resources Provisioned in This Project
 
-| File | Resource |
+| Folder | Contents |
 |---|---|
-| `provider.tf` | AWS Provider configuration |
-| `variables.tf` | All input variables centralized |
-| `vpc.tf` | VPC, Public Subnets, IGW, Route Table |
-| `sg.tf` | Security Group (SSH, HTTP, HTTPS) |
-| `keypair.tf` | RSA Key Pair generation and .pem file |
-| `ec2.tf` | EC2 Instance with Ubuntu AMI (data block) |
-| `s3.tf` | Private S3 Bucket with versioning |
-| `iam.tf` | IAM User with AdministratorAccess and Access Keys |
-| `alb.tf` | Application Load Balancer, Target Group, Listener |
-| `asg.tf` | Auto Scaling Group, Launch Template, CloudWatch Alarms |
+| `terraform-resources/` | Flat `.tf` files — VPC, EC2, SG, S3, IAM, ALB, ASG, keypair |
+| `terraform-modules/vpc-module/` | Reusable VPC module with dev/prod/test tfvars |
+| `terraform-modules/ec2-module/` | Reusable EC2 module with dev/prod/test tfvars |
+| `terraform-modules/s3-module/` | Reusable S3 module with dev/prod/test tfvars |
+| `terraform-modules/alb-module/` | Reusable ALB module with dev/prod/test tfvars |
+| `terraform-modules/iam-module/` | Reusable IAM module with dev/prod/test tfvars |
+| `terraform-modules/asg-module/` | Reusable ASG module with dev/prod/test tfvars |
+| `terraform-workspace/` | Workspace demo — dev/test/prod EC2 with remote backend |
 
 ---
 
@@ -193,15 +337,24 @@ Automatic backup of the previous `terraform.tfstate` created before every
 ```bash
 # Clone the repo
 git clone https://github.com/sarojbehera0610/Terraform-IaC-Projects.git
+
+# Flat resources
 cd Terraform-IaC-Projects/terraform-resources
-
-# Initialize Terraform
 terraform init
-
-# Preview changes
 terraform plan
+terraform apply
 
-# Apply infrastructure
+# Any module
+cd Terraform-IaC-Projects/terraform-modules/vpc-module
+terraform init
+terraform plan -var-file="dev.tfvars"
+terraform apply -var-file="dev.tfvars"
+
+# Workspace
+cd Terraform-IaC-Projects/terraform-workspace
+terraform init
+terraform workspace new dev
+terraform workspace select dev
 terraform apply
 
 # Destroy when done
