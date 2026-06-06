@@ -1,0 +1,12 @@
+aws_region              = "ap-south-1"
+asg_name                = "test-asg"
+environment             = "test"
+instance_type           = "t3.micro"
+key_name                = "test-keypair"
+allowed_ssh_cidr        = "0.0.0.0/0"
+asg_min_size            = 1
+asg_max_size            = 2
+asg_desired_capacity    = 1
+scale_out_cpu_threshold = 80
+scale_in_cpu_threshold  = 40
+cooldown_period         = 180

@@ -1,0 +1,12 @@
+aws_region              = "ap-south-1"
+asg_name                = "prod-asg"
+environment             = "prod"
+instance_type           = "t3.small"
+key_name                = "prod-keypair"
+allowed_ssh_cidr        = "0.0.0.0/0"
+asg_min_size            = 2
+asg_max_size            = 5
+asg_desired_capacity    = 2
+scale_out_cpu_threshold = 60
+scale_in_cpu_threshold  = 20
+cooldown_period         = 300
